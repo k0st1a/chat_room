@@ -1,0 +1,12 @@
+{application, chat_room,
+ [{description, "An OTP application"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, {chat_room_app, []}},
+  {applications,
+   [
+    kernel,
+    stdlib
+   ]}
+ ]
+}.

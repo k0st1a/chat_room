@@ -1,11 +1,10 @@
--module(chat_room_manager).
+-module(chat_room).
 
 -behaviour(gen_server).
 
 -export([
     %% API
     start_link/0,
-    start_room/0,
     %% gen_server callbacks
     init/1,
     handle_call/3,
@@ -16,8 +15,6 @@
 ]).
 
 -record(state, {
-    room :: undefined | pid(),
-    ref :: undefined | reference()
 }).
 
 %%%===================================================================
@@ -32,17 +29,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Start room if not exists.
-%%
-%% @spec start_room() -> {ok, pid()}.
-%% @end
-%%--------------------------------------------------------------------
-start_room() ->
-    gen_server:call(?MODULE, start_room).
+    gen_server:start_link(?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -77,15 +64,6 @@ init(Args) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(start_room, From, #state{room = Pid} = State) when is_pid(Pid) ->
-    lager:debug("start_room, room exists, Pid:~1000p, From:~100p", [Pid, From]),
-    {reply, {ok, Pid}, State};
-handle_call(start_room, From, #state{} = State) ->
-    lager:debug("start_room, room not exists, From:~100p", [From]),
-    {ok, Pid} = chat_room_sup:start_room(),
-    Ref = monitor(process, Pid),
-    lager:debug("Pid:~1000p, Ref:~1000p", [Pid, Ref]),
-    {reply, {ok, Pid}, State#state{room = Pid, ref = Ref}};
 handle_call(_Msg, _From, State) ->
     lager:debug("Unknown handle_call, From: ~100p, Msg:~p", [_From, _Msg]),
     {reply, {error, unknown_msg}, State}.
@@ -114,9 +92,6 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({'DOWN', Ref, process, Pid, Reason}, #state{ref = Ref} = State) ->
-    lager:debug("Room stopped, Pid:~1000p, Ref:~1000p, Reason:~1000p", [Pid, Ref, Reason]),
-    {noreply, State#state{ref = undefined, room = undefined}};
 handle_info(_Info, State) ->
     lager:debug("Skip handle_info, Info:~p", [_Info]),
     {noreply, State}.

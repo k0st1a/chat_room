@@ -7,9 +7,14 @@
 
 -behaviour(supervisor).
 
--export([start_link/0]).
-
--export([init/1]).
+-export([
+    %% API
+    start_link/0,
+    start_room/0,
+    stop_room/0, %% for test only
+    %% Supervisor callbacks
+    init/1
+]).
 
 -define(SERVER, ?MODULE).
 
@@ -18,9 +23,7 @@ start_link() ->
 
 init([]) ->
     SupFlags = #{
-        strategy => one_for_one,
-        intensity => 0,
-        period => 1
+        strategy => one_for_one
     },
     ChildSpecs = [
         #{
@@ -29,3 +32,14 @@ init([]) ->
         }
     ],
     {ok, {SupFlags, ChildSpecs}}.
+
+start_room() ->
+    Spec = #{
+        id => chat_room,
+		start => {chat_room, start_link, []},
+		restart => temporary
+    },
+    supervisor:start_child(?MODULE, Spec).
+
+stop_room() ->
+    supervisor:terminate_child(?MODULE, chat_room).

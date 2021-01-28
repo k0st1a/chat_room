@@ -23,7 +23,7 @@
 -endif.
 
 -record(state, {
-    users = [] :: users()
+    users = #{} :: map() %% pid := user()
 }).
 
 %%%===================================================================
@@ -100,13 +100,26 @@ handle_call(_Msg, _From, State) ->
 handle_cast(#user_enter_to_room{} = Msg, #state{users = Users} = State) ->
     lager:debug("user_enter_to_room, Msg:~1000000p, Users:~n~p", [Msg, Users]),
     User = make_and_monitor_user(Msg),
-    Users2 = [User| Users],
+    Users2 = add_user(User, Users),
     send(
         make_user_enter_to_room_notify(User),
         Users2
     ),
     lager:debug("Users2:~n~p", [Users2]),
     {noreply, State#state{users = Users2}};
+handle_cast(#user_msg_to_room{} = Msg, #state{users = Users} = State) ->
+    lager:debug("user_msg_to_room, Msg:~1000000p, Users:~n~p", [Msg, Users]),
+    case find_user(Msg#user_msg_to_room.from, Users) of
+        {ok, User} ->
+            lager:debug("User found, User:~1000000p", [User]),
+            send(
+                make_user_msg_to_room_notify(Msg, User),
+                Users
+            );
+        _ ->
+            lager:debug("User not found", [])
+    end,
+    {noreply, State};
 handle_cast(_Msg, State) ->
     lager:debug("Unknown handle_cast, Msg:~p", [_Msg]),
     {noreply, State}.
@@ -123,8 +136,8 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info({'DOWN', Ref, process, Pid, Reason}, #state{users = Users} = State) ->
     lager:debug("Process is down, Pid:~1000p, Ref:~1000p, Reason:~1000p", [Pid, Ref, Reason]),
-    case lists:keytake(Ref, #user.ref, Users) of
-        {_, User, Users2} ->
+    case take_user(Pid, Users) of
+        {User, Users2} ->
             lager:debug("User found, User:~1000000p, Users2:~n ~p", [User, Users2]),
             send(
                 make_user_leave_from_room_notify(User),
@@ -203,12 +216,35 @@ make_user_leave_from_room_notify(#user{} = User) ->
         user_pid = User#user.pid
     }.
 
--spec send(Msg :: term(), User :: user() | users()) -> ok.
-send(Msg, #user{pid = Pid}) ->
+-spec make_user_msg_to_room_notify(user_msg_to_room(), user()) -> user_msg_to_room_notify().
+make_user_msg_to_room_notify(#user_msg_to_room{} = Msg, #user{} = User) ->
+    #user_msg_to_room_notify{
+        user_name = User#user.name,
+        user_pid = User#user.pid,
+        msg_body = Msg#user_msg_to_room.body
+    }.
+
+-spec send(Msg :: term(), map() | list() | pid()) -> ok.
+send(Msg, Pid) when is_pid(Pid) ->
     erlang:send(Pid, Msg),
     ok;
-send(Msg, Users) when is_list(Users) ->
+send(Msg, List) when is_list(List) ->
     lists:foreach(
-        fun (User) -> send(Msg, User) end,
-        Users
-    ).
+        fun (Value) -> send(Msg, Value) end,
+        List
+    );
+send(Msg, Users) when is_map(Users) ->
+    %% т.к. в качестве ключа используется pid процесса
+    send(Msg, maps:keys(Users)).
+
+-spec add_user(User :: user(), Users :: map()) -> Users2 :: map().
+add_user(#user{} = User, Users) ->
+    maps:put(User#user.pid, User, Users).
+
+-spec find_user(Pid :: pid(), Users :: map()) -> {ok, User :: user()} | false.
+find_user(Pid, Users) ->
+    maps:find(Pid, Users).
+
+-spec take_user(Pid :: pid(), Users :: map()) -> {User :: user(), Users2 :: map()} | error.
+take_user(Pid, Users) ->
+    maps:take(Pid, Users).

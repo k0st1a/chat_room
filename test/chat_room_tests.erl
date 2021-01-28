@@ -48,4 +48,22 @@ make_user_leave_from_room_notify_test() ->
         )
     ).
 
+make_user_msg_to_room_notify_test() ->
+    ?assertMatch(
+        #user_msg_to_room_notify{
+            user_name = <<"user name">>,
+            user_pid = "<0.0.0>",
+            msg_body = <<"Message body">>
+        },
+        chat_room:make_user_msg_to_room_notify(
+            #user_msg_to_room{
+                body = <<"Message body">>
+            },
+            #user{
+                name = <<"user name">>,
+                pid = "<0.0.0>"
+            }
+        )
+    ).
+
 -endif.

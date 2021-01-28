@@ -17,7 +17,8 @@
 %% Test cases
 -export([
     user_enter_to_room/1,
-    user_leave_from_room/1
+    user_leave_from_room/1,
+    user_msg_to_room/1
 ]).
 
 %%%===================================================================
@@ -26,7 +27,8 @@
 
 all() -> [
     user_enter_to_room,
-    user_leave_from_room
+    user_leave_from_room,
+    user_msg_to_room
 ].
 
 suite() ->
@@ -120,5 +122,44 @@ user_leave_from_room(_Config) ->
             ?assertEqual(
                 Pid2,
                 Body3#user_leave_from_room_notify.user_pid
+            )
+    end.
+
+user_msg_to_room(_Config) ->
+    {ok, Pid} = chat_room_manager:start_room(),
+    chat_room:cast(
+        Pid,
+        #user_enter_to_room{user = <<"user name">>, from = self()}
+    ),
+    %% ловим нотификацию о входе пользователя в комнату
+    receive
+        #user_enter_to_room_notify{} = Body->
+            ?assertEqual(
+                <<"user name">>,
+                Body#user_enter_to_room_notify.user_name
+            ),
+            ?assertEqual(
+                self(),
+                Body#user_enter_to_room_notify.user_pid
+            )
+    end,
+    chat_room:cast(
+        Pid,
+        #user_msg_to_room{body = <<"My message">>, from = self()}
+    ),
+    %% ловим нотификацию о сообщении от пользователя в комнату
+    receive
+        #user_msg_to_room_notify{} = Body2 ->
+            ?assertEqual(
+                <<"user name">>,
+                Body2#user_msg_to_room_notify.user_name
+            ),
+            ?assertEqual(
+                self(),
+                Body2#user_msg_to_room_notify.user_pid
+            ),
+            ?assertEqual(
+                <<"My message">>,
+                Body2#user_msg_to_room_notify.msg_body
             )
     end.

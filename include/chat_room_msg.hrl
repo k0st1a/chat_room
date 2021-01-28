@@ -1,7 +1,8 @@
 %% Запрос пользователя о входе в команту
 -record(user_enter_to_room, {
     user :: binary(),
-    from :: pid()
+    from :: pid(),
+    is_bot = false :: boolean()
 }).
 -type user_enter_to_room() :: #user_enter_to_room{}.
 

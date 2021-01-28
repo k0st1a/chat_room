@@ -4,11 +4,13 @@
 
 -include("chat_room_msg.hrl").
 -include("chat_room_user_state.hrl").
+-include("chat_room_bot_msg.hrl").
 
 -export([
     %% API
     start_link/0,
     cast/2,
+    call/2,
     %% gen_server callbacks
     init/1,
     handle_call/3,
@@ -50,6 +52,16 @@ start_link() ->
 cast(Pid, Body) ->
     gen_server:cast(Pid, Body).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Makes synchronous call to this gen_server via pid.
+%%
+%% @spec call(Pid :: pid(), Body :: term()) -> {ok, term()} | {error, term()}.
+%% @end
+%%--------------------------------------------------------------------
+call(Pid, Body) ->
+    gen_server:call(Pid, Body).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -83,6 +95,33 @@ init(Args) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+%% Можно оптимизировать поиск бота, а именно, в #state{} добавить поле
+%% bots значение которого будет мапа, где ключем будет выступать pid
+%% процесса бота.
+handle_call(#start_room_bot{} = Msg, _From, #state{users = Users} = State) ->
+    lager:debug("start_room_bot, Msg:~1000000p, From: ~100p, Users:~n~p", [Msg, _From, Users]),
+    case find_bot(Users) of
+        #user{} = User->
+            lager:debug("Bot already started, User:~1000000p", [User]),
+            {reply, {error, already_started}, State};
+        _ ->
+            lager:debug("Bot not found => start bot", []),
+            Result = chat_room_sup:start_room_bot(Msg),
+            lager:debug("Result:~1000000p", [Result]),
+            {reply, Result, State}
+    end;
+handle_call(#stop_room_bot{} = Msg, _From, #state{users = Users} = State) ->
+    lager:debug("stop_room_bot, Msg:~1000000p, From: ~100p, Users:~n~p", [Msg, _From, Users]),
+    case find_bot(Users) of
+        #user{} = User->
+            lager:debug("Bot found, User:~1000000p", [User]),
+            Result = chat_room_sup:stop_room_bot(),
+            lager:debug("Result:~1000p", [Result]),
+            {reply, Result, State};
+        _ ->
+            lager:debug("Bot not found", []),
+            {reply, error, State}
+    end;
 handle_call(_Msg, _From, State) ->
     lager:debug("Unknown handle_call, From: ~100p, Msg:~p", [_From, _Msg]),
     {reply, {error, unknown_msg}, State}.
@@ -181,7 +220,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
 -spec make_and_monitor_user(Msg :: user_enter_to_room_notify()) -> User :: user().
 make_and_monitor_user(Msg) ->
     lager:debug("make_and_monitor_user, Msg:~1000p", [Msg]),
@@ -191,9 +229,17 @@ make_and_monitor_user(Msg) ->
 
 -spec make_user(Msg :: user_enter_to_room()) -> User :: user().
 make_user(#user_enter_to_room{} = Msg) ->
+    lager:debug("make_user, Msg:~1000000p", [Msg]),
     #user{
         name = Msg#user_enter_to_room.user,
-        pid = Msg#user_enter_to_room.from
+        pid = Msg#user_enter_to_room.from,
+        options =
+            case Msg#user_enter_to_room.is_bot of
+                true ->
+                    #{bot => true};
+                _ ->
+                    #{}
+            end
     }.
 
 -spec monitor_user(User :: user()) -> User2 :: user().
@@ -248,3 +294,22 @@ find_user(Pid, Users) ->
 -spec take_user(Pid :: pid(), Users :: map()) -> {User :: user(), Users2 :: map()} | error.
 take_user(Pid, Users) ->
     maps:take(Pid, Users).
+
+-spec find_bot(map() | users() | user()) -> user() | false.
+find_bot(Users) when is_map(Users) ->
+    find_bot(maps:values(Users));
+find_bot([User| Users]) ->
+    case is_bot(User) of
+        true ->
+            User;
+        _ ->
+            find_bot(Users)
+    end;
+find_bot(_) ->
+    false.
+
+-spec is_bot(User :: user()) -> boolean().
+is_bot(#user{options = #{bot := true}}) ->
+    true;
+is_bot(_) ->
+    false.

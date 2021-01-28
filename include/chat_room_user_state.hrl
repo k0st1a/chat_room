@@ -1,7 +1,11 @@
+-type user_options() :: #{
+    bot => true
+}.
 -record(user, {
     name :: binary(),
     pid :: pid(),
-    ref :: reference()
+    ref :: reference(),
+    options = #{} :: user_options()
 }).
 -type user() :: #user{}.
 -type users() :: [user()].

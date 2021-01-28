@@ -1,11 +1,14 @@
--module(chat_room_manager).
+-module(chat_room_bot).
 
 -behaviour(gen_server).
 
+-include("chat_room_msg.hrl").
+-include("chat_room_bot_msg.hrl").
+
 -export([
     %% API
-    start_link/0,
-    start_room/0,
+    start_link/1,
+    generate_timeout/0, %% for mocking this method
     %% gen_server callbacks
     init/1,
     handle_call/3,
@@ -15,12 +18,17 @@
     code_change/3
 ]).
 
+-ifdef(TEST).
+-compile(export_all).
+-endif.
+
 -record(state, {
-    room :: undefined | pid(),
-    ref :: undefined | reference(),
-    bot_pid :: undefined | pid(),
-    bot_ref :: undefined | pid()
+    room_pid :: undefined | pid(),
+    room_ref :: undefined | reference(),
+    timer_ref :: undefined | reference()
 }).
+
+-define(TIMER_SEND_MSG, timer_send_msg).
 
 %%%===================================================================
 %%% API
@@ -30,21 +38,11 @@
 %% @doc
 %% Starts the server
 %%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
+%% @spec start_link(Args :: term()) -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Start room if not exists.
-%%
-%% @spec start_room() -> {ok, pid()}.
-%% @end
-%%--------------------------------------------------------------------
-start_room() ->
-    gen_server:call(?MODULE, start_room).
+start_link(Args) ->
+    gen_server:start_link(?MODULE, Args, []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -61,9 +59,17 @@ start_room() ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init(Args) ->
-    lager:info("Init, Args:~p", [Args]),
-    {ok, #state{}}.
+init(#start_room_bot{room_pid = RoomPid, bot_name = BotName}) ->
+    lager:info("Init, RoomPid:~1000p, BotName:~1000p", [RoomPid, BotName]),
+    RoomRef = monitor(process, RoomPid),
+    Timeout = chat_room_bot:generate_timeout(),
+    TimerRef = start_timer(?TIMER_SEND_MSG, Timeout),
+    lager:info("RoomRef:~1000p, TimerRef:~1000p, Timeout:~1000p", [RoomRef, TimerRef, Timeout]),
+    chat_room:cast(
+        RoomPid,
+        #user_enter_to_room{user = BotName, from = self(), is_bot = true}
+    ),
+    {ok, #state{room_pid = RoomPid, room_ref = RoomRef, timer_ref = TimerRef}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -79,15 +85,6 @@ init(Args) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(start_room, From, #state{room = Pid} = State) when is_pid(Pid) ->
-    lager:debug("start_room, room exists, Pid:~1000p, From:~100p", [Pid, From]),
-    {reply, {ok, Pid}, State};
-handle_call(start_room, From, #state{} = State) ->
-    lager:debug("start_room, room not exists, From:~100p", [From]),
-    {ok, Pid} = chat_room_sup:start_room(),
-    Ref = monitor(process, Pid),
-    lager:debug("Pid:~1000p, Ref:~1000p", [Pid, Ref]),
-    {reply, {ok, Pid}, State#state{room = Pid, ref = Ref}};
 handle_call(_Msg, _From, State) ->
     lager:debug("Unknown handle_call, From: ~100p, Msg:~p", [_From, _Msg]),
     {reply, {error, unknown_msg}, State}.
@@ -117,10 +114,18 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 %% room
-handle_info({'DOWN', Ref, process, Pid, Reason}, #state{ref = Ref} = State) ->
-    lager:debug("Room stopped, Pid:~1000p, Ref:~1000p, Reason:~1000p", [Pid, Ref, Reason]),
-    {noreply, State#state{ref = undefined, room = undefined}};
-%% unknown
+handle_info({'DOWN', Ref, process, Pid, Reason}, #state{room_pid = Pid} = State) ->
+    lager:debug("Room is down, Pid:~1000p, Ref:~1000p, Reason:~1000p", [Pid, Ref, Reason]),
+    {stop, normal, State};
+%% timer
+handle_info({timeout, Ref, Id}, #state{timer_ref = Ref} = State) ->
+    lager:debug("Timer fired, Ref:~100p, Id:~1000p", [Ref, Id]),
+    send_some_msg_to_room(State#state.room_pid),
+    Timeout = chat_room_bot:generate_timeout(),
+    TimerRef = start_timer(?TIMER_SEND_MSG, Timeout),
+    lager:debug("TimerRef:~1000p", [TimerRef]),
+    {noreply, State#state{timer_ref = TimerRef}};
+
 handle_info(_Info, State) ->
     lager:debug("Skip handle_info, Info:~p", [_Info]),
     {noreply, State}.
@@ -154,3 +159,24 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec generate_timeout() -> non_neg_integer().
+generate_timeout() ->
+    rand:uniform(10000). %% 1 =< X =< N
+
+-spec start_timer(Id :: atom(), Timeout :: non_neg_integer()) -> Ref :: reference().
+start_timer(Id, Timeout) when erlang:is_integer(Timeout) andalso (Timeout >= 0) ->
+    Ref = erlang:start_timer(Timeout, self(), Id),
+    lager:debug("Start timer, Id:~100p, Ref:~100p", [Id, Ref]),
+    Ref.
+
+-spec send_some_msg_to_room(Pid :: pid()) -> ok.
+send_some_msg_to_room(Pid) ->
+    lager:debug("send_some_msg_to_room, Pid:~1000p", [Pid]),
+    chat_room:cast(
+        Pid,
+        #user_msg_to_room{
+            body = <<"Message from bot">>,
+            from = self()
+        }
+    ).

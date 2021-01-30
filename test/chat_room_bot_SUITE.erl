@@ -1,6 +1,7 @@
 -module(chat_room_bot_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("msg.hrl").
 -include("chat_room_msg.hrl").
 -include("chat_room_user_state.hrl").
 -include("chat_room_bot_msg.hrl").
@@ -41,7 +42,7 @@ init_per_testcase(_TestCase, Config) ->
     chat_room_api:lager(),
     chat_room_api:start(),
     meck:new(chat_room_bot, [passthrough]),
-    meck:expect(chat_room_bot, generate_timeout, fun () -> 0 end),
+    meck:expect(chat_room_bot, generate_timeout, fun () -> 100 end),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
@@ -54,14 +55,22 @@ end_per_testcase(_TestCase, _Config) ->
 %%% Test cases
 %%%===================================================================
 check_room_bot(_Config) ->
+    lager:debug("Start room", []),
     {ok, RoomPid} = chat_room_manager:start_room(),
+
+    lager:debug("Send user_enter_to_room", []),
     chat_room:cast(
         RoomPid,
-        #user_enter_to_room{user = <<"user name">>, from = self()}
+        #msg{
+            from = self(),
+            body = #user_enter_to_room{user = <<"user name">>}
+        }
     ),
-    %% ловим нотификацию о входе пользователя в комнату
+
+    lager:debug("Wait user_enter_to_room_notify", []),
+    %% ожидаем нотификацию о входе пользователя в комнату
     receive
-        #user_enter_to_room_notify{} = Body->
+        #msg{body = #user_enter_to_room_notify{} = Body} ->
             ?assertEqual(
                 <<"user name">>,
                 Body#user_enter_to_room_notify.user_name
@@ -71,11 +80,15 @@ check_room_bot(_Config) ->
                 Body#user_enter_to_room_notify.user_pid
             )
     end,
+
+    lager:debug("Start bot", []),
     %% запускаем бота в комнату
     {ok, BotPid} = chat_room:call(RoomPid, #start_room_bot{bot_name = <<"bot name">>, room_pid = RoomPid}),
+
+    lager:debug("Wait user_enter_to_room_notify by boot", []),
     %% ловим нотификацию о входе бота в комнату
     receive
-        #user_enter_to_room_notify{} = Body2 ->
+        #msg{body = #user_enter_to_room_notify{} = Body2} ->
             ?assertEqual(
                 <<"bot name">>,
                 Body2#user_enter_to_room_notify.user_name
@@ -85,9 +98,11 @@ check_room_bot(_Config) ->
                 Body2#user_enter_to_room_notify.user_pid
             )
     end,
+
+    lager:debug("Wait user_msg_to_room_notify by boot", []),
     %% ловим нотификацию о сообщении от бота в комнате
     receive
-        #user_msg_to_room_notify{} = Body3 ->
+        #msg{body = #user_msg_to_room_notify{} = Body3} ->
             ?assertEqual(
                 <<"bot name">>,
                 Body3#user_msg_to_room_notify.user_name
@@ -101,11 +116,15 @@ check_room_bot(_Config) ->
                 Body3#user_msg_to_room_notify.msg_body
             )
     end,
+
+    lager:debug("Stop bot", []),
     %% Останавливаем бота
     ok = chat_room:call(RoomPid, #stop_room_bot{}),
+
+    lager:debug("Wait user_leave_from_room_notify by boot", []),
     %% ловим нотификацию о выходе бота из комнаты
     receive
-        #user_leave_from_room_notify{} = Body4 ->
+        #msg{body = #user_leave_from_room_notify{} = Body4} ->
             ?assertEqual(
                 <<"bot name">>,
                 Body4#user_leave_from_room_notify.user_name

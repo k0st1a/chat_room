@@ -2,6 +2,7 @@
 
 -behaviour(gen_server).
 
+-include("msg.hrl").
 -include("chat_room_msg.hrl").
 -include("chat_room_bot_msg.hrl").
 
@@ -65,10 +66,13 @@ init(#start_room_bot{room_pid = RoomPid, bot_name = BotName}) ->
     Timeout = chat_room_bot:generate_timeout(),
     TimerRef = start_timer(?TIMER_SEND_MSG, Timeout),
     lager:info("RoomRef:~1000p, TimerRef:~1000p, Timeout:~1000p", [RoomRef, TimerRef, Timeout]),
-    chat_room:cast(
-        RoomPid,
-        #user_enter_to_room{user = BotName, from = self(), is_bot = true}
-    ),
+    Body =
+        #user_enter_to_room{
+            user = BotName,
+            is_bot = true
+        },
+    Msg = chat_room_utils:make_msg(self(), Body),
+    chat_room:cast(RoomPid, Msg),
     {ok, #state{room_pid = RoomPid, room_ref = RoomRef, timer_ref = TimerRef}}.
 
 %%--------------------------------------------------------------------
@@ -173,10 +177,10 @@ start_timer(Id, Timeout) when erlang:is_integer(Timeout) andalso (Timeout >= 0) 
 -spec send_some_msg_to_room(Pid :: pid()) -> ok.
 send_some_msg_to_room(Pid) ->
     lager:debug("send_some_msg_to_room, Pid:~1000p", [Pid]),
-    chat_room:cast(
-        Pid,
+    Body =
         #user_msg_to_room{
             body = <<"Message from bot">>,
             from = self()
-        }
-    ).
+        },
+    Msg = chat_room_utils:make_msg(self(), Body),
+    chat_room:cast(Pid, Msg).

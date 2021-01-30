@@ -3,6 +3,7 @@
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("msg.hrl").
 -include("chat_room_msg.hrl").
 -include("chat_room_user_state.hrl").
 
@@ -21,9 +22,12 @@ make_user() ->
             pid = "<0.0.0>"
         },
         chat_room:make_user(
-            #user_enter_to_room{
-                user = <<"user">>,
-                from = "<0.0.0>"
+            #msg{
+                from = "<0.0.0>",
+                body =
+                    #user_enter_to_room{
+                        user = <<"user">>
+                    }
             }
         )
     ).
@@ -38,10 +42,13 @@ make_user_with_bot_option() ->
             }
         },
         chat_room:make_user(
-            #user_enter_to_room{
-                user = <<"user">>,
+            #msg{
                 from = "<0.0.0>",
-                is_bot = true
+                body =
+                    #user_enter_to_room{
+                        user = <<"user">>,
+                        is_bot = true
+                    }
             }
         )
     ).

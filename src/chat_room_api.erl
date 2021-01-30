@@ -7,7 +7,9 @@
     lager/0,
     nolager/0,
     debug/0,
-    nodebug/0
+    nodebug/0,
+    gun/0,
+    nogun/0
 ]).
 
 -spec start() -> {ok, Started :: [atom()]} | {error, Reason :: term()}.
@@ -68,4 +70,18 @@ noasync() ->
     lager:info("Nosync", []),
     Result = application:stop(async),
     lager:info("Nosync, Result: ~p", [Result]),
+    ok.
+
+-spec gun() -> ok.
+gun() ->
+    lager:info("Gun", []),
+    Result = application:ensure_all_started(gun),
+    lager:info("Gun, Result: ~p", [Result]),
+    ok.
+
+-spec nogun() -> ok.
+nogun() ->
+    lager:info("NoGun", []),
+    Result = application:stop(gun),
+    lager:info("NoGun, Result: ~p", [Result]),
     ok.

@@ -2,6 +2,7 @@
 
 -behaviour(gen_server).
 
+-include("msg.hrl").
 -include("chat_room_msg.hrl").
 -include("chat_room_user_state.hrl").
 -include("chat_room_bot_msg.hrl").
@@ -136,25 +137,23 @@ handle_call(_Msg, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(#user_enter_to_room{} = Msg, #state{users = Users} = State) ->
+handle_cast(#msg{body = #user_enter_to_room{}} = Msg, #state{users = Users} = State) ->
     lager:debug("user_enter_to_room, Msg:~1000000p, Users:~n~p", [Msg, Users]),
     User = make_and_monitor_user(Msg),
     Users2 = add_user(User, Users),
-    send(
-        make_user_enter_to_room_notify(User),
-        Users2
-    ),
+    Notify = make_user_enter_to_room_notify(User),
+    Resp = chat_room_utils:make_msg(self(), Notify),
+    send(Resp, Users2),
     lager:debug("Users2:~n~p", [Users2]),
     {noreply, State#state{users = Users2}};
-handle_cast(#user_msg_to_room{} = Msg, #state{users = Users} = State) ->
+handle_cast(#msg{body = #user_msg_to_room{}} = Msg, #state{users = Users} = State) ->
     lager:debug("user_msg_to_room, Msg:~1000000p, Users:~n~p", [Msg, Users]),
-    case find_user(Msg#user_msg_to_room.from, Users) of
+    case find_user(Msg#msg.from, Users) of
         {ok, User} ->
             lager:debug("User found, User:~1000000p", [User]),
-            send(
-                make_user_msg_to_room_notify(Msg, User),
-                Users
-            );
+            Notify = make_user_msg_to_room_notify(Msg#msg.body, User),
+            Resp = chat_room_utils:make_msg(self(), Notify),
+            send(Resp, Users);
         _ ->
             lager:debug("User not found", [])
     end,
@@ -178,10 +177,10 @@ handle_info({'DOWN', Ref, process, Pid, Reason}, #state{users = Users} = State) 
     case take_user(Pid, Users) of
         {User, Users2} ->
             lager:debug("User found, User:~1000000p, Users2:~n ~p", [User, Users2]),
-            send(
-                make_user_leave_from_room_notify(User),
-                Users2
-            ),
+            Notify = make_user_leave_from_room_notify(User),
+            Resp = chat_room_utils:make_msg(self(), Notify),
+            lager:debug("Resp:~n~p", [Resp]),
+            send(Resp, Users2),
             {noreply, State#state{users = Users2}};
         _ ->
             lager:debug("User not found", []),
@@ -228,13 +227,13 @@ make_and_monitor_user(Msg) ->
     ).
 
 -spec make_user(Msg :: user_enter_to_room()) -> User :: user().
-make_user(#user_enter_to_room{} = Msg) ->
+make_user(#msg{body = #user_enter_to_room{} = Body} = Msg) ->
     lager:debug("make_user, Msg:~1000000p", [Msg]),
     #user{
-        name = Msg#user_enter_to_room.user,
-        pid = Msg#user_enter_to_room.from,
+        name = Body#user_enter_to_room.user,
+        pid = Msg#msg.from,
         options =
-            case Msg#user_enter_to_room.is_bot of
+            case Body#user_enter_to_room.is_bot of
                 true ->
                     #{bot => true};
                 _ ->

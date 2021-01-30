@@ -1,6 +1,7 @@
 -module(chat_room_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("msg.hrl").
 -include("chat_room_msg.hrl").
 -include("chat_room_user_state.hrl").
 
@@ -54,14 +55,22 @@ end_per_testcase(_TestCase, _Config) ->
 %%% Test cases
 %%%===================================================================
 user_enter_to_room(_Config) ->
+    lager:debug("Start room", []),
     {ok, Pid} = chat_room_manager:start_room(),
+
+    lager:debug("Send user_enter_to_room", []),
     chat_room:cast(
         Pid,
-        #user_enter_to_room{user = <<"user name">>, from = self()}
+        #msg{
+            from = self(),
+            body = #user_enter_to_room{user = <<"user name">>}
+        }
     ),
-    %% ловим нотификацию о входе пользователя в комнату
+
+    lager:debug("Wait user_enter_to_room_notify", []),
+    %% ожидаем нотификацию о входе пользователя в комнату
     receive
-        #user_enter_to_room_notify{} = Body->
+        #msg{body = #user_enter_to_room_notify{} = Body} ->
             ?assertEqual(
                 <<"user name">>,
                 Body#user_enter_to_room_notify.user_name
@@ -73,14 +82,22 @@ user_enter_to_room(_Config) ->
     end.
 
 user_leave_from_room(_Config) ->
+    lager:debug("Start room", []),
     {ok, Pid} = chat_room_manager:start_room(),
+
+    lager:debug("Send user_enter_to_room", []),
     chat_room:cast(
         Pid,
-        #user_enter_to_room{user = <<"user name">>, from = self()}
+        #msg{
+            from = self(),
+            body = #user_enter_to_room{user = <<"user name">>}
+        }
     ),
-    %% ловим нотификацию о входе пользователя в комнату
+
+    lager:debug("Wait user_enter_to_room_notify", []),
+    %% ожидаем нотификацию о входе пользователя в комнату
     receive
-        #user_enter_to_room_notify{} = Body->
+        #msg{body = #user_enter_to_room_notify{} = Body} ->
             ?assertEqual(
                 <<"user name">>,
                 Body#user_enter_to_room_notify.user_name
@@ -90,19 +107,26 @@ user_leave_from_room(_Config) ->
                 Body#user_enter_to_room_notify.user_pid
             )
     end,
+
+    lager:debug("Start second user to room", []),
     %% запускаем второго пользователя в комнату
     Pid2 =
         erlang:spawn(
             fun () ->
                     chat_room:cast(
                         Pid,
-                        #user_enter_to_room{user = <<"user name 2">>, from = self()}
+                        #msg{
+                            from = self(),
+                            body = #user_enter_to_room{user = <<"user name 2">>}
+                        }
                     )
             end
         ),
-    %% ловим нотификацию о входе второго пользователя в комнату
+
+    lager:debug("Wait user_enter_to_room_notify by second user", []),
+    %% ожидаем нотификацию о входе второго пользователя в комнату
     receive
-        #user_enter_to_room_notify{} = Body2 ->
+        #msg{body = #user_enter_to_room_notify{} = Body2} ->
             ?assertEqual(
                 <<"user name 2">>,
                 Body2#user_enter_to_room_notify.user_name
@@ -112,9 +136,11 @@ user_leave_from_room(_Config) ->
                 Body2#user_enter_to_room_notify.user_pid
             )
     end,
-    %% ловим нотификацию о выходе второго пользователя из комнаты
+
+    lager:debug("Wait user_leave_from_room_notify by second user", []),
+    %% ожидаем нотификацию о выходе второго пользователя из комнаты
     receive
-        #user_leave_from_room_notify{} = Body3->
+        #msg{body = #user_leave_from_room_notify{} = Body3} ->
             ?assertEqual(
                 <<"user name 2">>,
                 Body3#user_leave_from_room_notify.user_name
@@ -126,14 +152,22 @@ user_leave_from_room(_Config) ->
     end.
 
 user_msg_to_room(_Config) ->
+    lager:debug("Start room", []),
     {ok, Pid} = chat_room_manager:start_room(),
+
+    lager:debug("Send user_enter_to_room", []),
     chat_room:cast(
         Pid,
-        #user_enter_to_room{user = <<"user name">>, from = self()}
+        #msg{
+            from = self(),
+            body = #user_enter_to_room{user = <<"user name">>}
+        }
     ),
-    %% ловим нотификацию о входе пользователя в комнату
+
+    lager:debug("Wait user_enter_to_room_notify", []),
+    %% ожидаем нотификацию о входе пользователя в комнату
     receive
-        #user_enter_to_room_notify{} = Body->
+        #msg{body = #user_enter_to_room_notify{} = Body} ->
             ?assertEqual(
                 <<"user name">>,
                 Body#user_enter_to_room_notify.user_name
@@ -143,13 +177,20 @@ user_msg_to_room(_Config) ->
                 Body#user_enter_to_room_notify.user_pid
             )
     end,
+
+    lager:debug("Send user_msg_to_room", []),
     chat_room:cast(
         Pid,
-        #user_msg_to_room{body = <<"My message">>, from = self()}
+        #msg{
+            from = self(),
+            body = #user_msg_to_room{body = <<"My message">>}
+        }
     ),
-    %% ловим нотификацию о сообщении от пользователя в комнату
+
+    lager:debug("Wait user_msg_to_room_notify", []),
+    %% ожидаем нотификацию о сообщении от пользователя в комнату
     receive
-        #user_msg_to_room_notify{} = Body2 ->
+        #msg{body = #user_msg_to_room_notify{} = Body2} ->
             ?assertEqual(
                 <<"user name">>,
                 Body2#user_msg_to_room_notify.user_name

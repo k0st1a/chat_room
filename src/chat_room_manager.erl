@@ -2,10 +2,13 @@
 
 -behaviour(gen_server).
 
+-include("start_room.hrl").
+
 -export([
     %% API
     start_link/0,
     start_room/0,
+    start_room/1,
     %% gen_server callbacks
     init/1,
     handle_call/3,
@@ -44,7 +47,17 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 start_room() ->
-    gen_server:call(?MODULE, start_room).
+    start_room(false).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Start room if not exists.
+%%
+%% @spec start_room(WithBot :: boolean()) -> {ok, pid()}.
+%% @end
+%%--------------------------------------------------------------------
+start_room(WithBot) ->
+    gen_server:call(?MODULE, #start_room{with_bot = WithBot}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -79,12 +92,12 @@ init(Args) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(start_room, From, #state{room = Pid} = State) when is_pid(Pid) ->
+handle_call(#start_room{}, From, #state{room = Pid} = State) when is_pid(Pid) ->
     lager:debug("start_room, room exists, Pid:~1000p, From:~100p", [Pid, From]),
     {reply, {ok, Pid}, State};
-handle_call(start_room, From, #state{} = State) ->
+handle_call(#start_room{} = Msg, From, #state{} = State) ->
     lager:debug("start_room, room not exists, From:~100p", [From]),
-    {ok, Pid} = chat_room_sup:start_room(),
+    {ok, Pid} = chat_room_sup:start_room(Msg),
     Ref = monitor(process, Pid),
     lager:debug("Pid:~1000p, Ref:~1000p", [Pid, Ref]),
     {reply, {ok, Pid}, State#state{room = Pid, ref = Ref}};

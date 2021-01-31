@@ -44,9 +44,16 @@ init_per_testcase(_TestCase, Config) ->
     chat_room_api:lager(),
     chat_room_api:start(),
     chat_room_api:gun(),
+    meck:new(chat_room_manager, [passthrough]),
+    meck:expect(
+        chat_room_manager,
+        start_room,
+        fun (_) -> chat_room_manager:start_room() end
+    ),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
+    meck:unload(chat_room_manager),
     chat_room_api:stop(),
     chat_room_api:nolager(),
     chat_room_api:nogun(),

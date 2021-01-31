@@ -2,6 +2,7 @@
 
 -behaviour(gen_server).
 
+-include("start_room.hrl").
 -include("msg.hrl").
 -include("chat_room_msg.hrl").
 -include("chat_room_user_state.hrl").
@@ -9,7 +10,7 @@
 
 -export([
     %% API
-    start_link/0,
+    start_link/1,
     cast/2,
     call/2,
     %% gen_server callbacks
@@ -37,11 +38,11 @@
 %% @doc
 %% Starts the server
 %%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
+%% @spec start_link(Args :: term()) -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link(?MODULE, [], []).
+start_link(Args) ->
+    gen_server:start_link(?MODULE, Args, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -78,8 +79,18 @@ call(Pid, Body) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init(Args) ->
-    lager:info("Init, Args:~p", [Args]),
+init(#start_room{with_bot = WithBot}) ->
+    lager:info("Init, WithBot:~1000p", [WithBot]),
+    case WithBot of
+        true ->
+            lager:info("Send self chat_room_bot", []),
+            erlang:send(
+                self(),
+                #start_room_bot{bot_name = <<"Bot">>, room_pid = self()}
+            );
+        _ ->
+            ok
+    end,
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -101,16 +112,8 @@ init(Args) ->
 %% процесса бота.
 handle_call(#start_room_bot{} = Msg, _From, #state{users = Users} = State) ->
     lager:debug("start_room_bot, Msg:~1000000p, From: ~100p, Users:~n~p", [Msg, _From, Users]),
-    case find_bot(Users) of
-        #user{} = User->
-            lager:debug("Bot already started, User:~1000000p", [User]),
-            {reply, {error, already_started}, State};
-        _ ->
-            lager:debug("Bot not found => start bot", []),
-            Result = chat_room_sup:start_room_bot(Msg),
-            lager:debug("Result:~1000000p", [Result]),
-            {reply, Result, State}
-    end;
+    Result = start_bot(Msg, Users),
+    {reply, Result, State};
 handle_call(#stop_room_bot{} = Msg, _From, #state{users = Users} = State) ->
     lager:debug("stop_room_bot, Msg:~1000000p, From: ~100p, Users:~n~p", [Msg, _From, Users]),
     case find_bot(Users) of
@@ -172,6 +175,10 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_info(#start_room_bot{} = Msg, #state{users = Users} = State) ->
+    lager:debug("info, start_room_bot, Msg:~1000p", [Msg]),
+    start_bot(Msg, Users),
+    {noreply, State};
 handle_info({'DOWN', Ref, process, Pid, Reason}, #state{users = Users} = State) ->
     lager:debug("Process is down, Pid:~1000p, Ref:~1000p, Reason:~1000p", [Pid, Ref, Reason]),
     case take_user(Pid, Users) of
@@ -293,6 +300,21 @@ find_user(Pid, Users) ->
 -spec take_user(Pid :: pid(), Users :: map()) -> {User :: user(), Users2 :: map()} | error.
 take_user(Pid, Users) ->
     maps:take(Pid, Users).
+
+-spec start_bot(Msg :: #start_room_bot{}, Users :: map()) -> {ok, pid()}
+                                                           | {error, already_started}.
+start_bot(#start_room_bot{} = Msg, Users) ->
+    lager:debug("start_bot, Msg:~1000p, Users:~n~p", [Msg, users]),
+    case find_bot(Users) of
+        #user{} = User->
+            lager:debug("Bot already started, User:~1000000p", [User]),
+            {error, already_started};
+        _ ->
+            lager:debug("Bot not found => start bot", []),
+            Result = chat_room_sup:start_room_bot(Msg),
+            lager:debug("Result:~1000000p", [Result]),
+            Result
+    end.
 
 -spec find_bot(map() | users() | user()) -> user() | false.
 find_bot(Users) when is_map(Users) ->

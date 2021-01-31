@@ -10,7 +10,7 @@
 -export([
     %% API
     start_link/0,
-    start_room/0,
+    start_room/1,
     stop_room/0, %% for test only
     start_room_bot/1,
     stop_room_bot/0, %% for test only
@@ -35,10 +35,10 @@ init([]) ->
     ],
     {ok, {SupFlags, ChildSpecs}}.
 
-start_room() ->
+start_room(Args) ->
     Spec = #{
         id => chat_room,
-		start => {chat_room, start_link, []},
+		start => {chat_room, start_link, [Args]},
 		restart => temporary
     },
     supervisor:start_child(?MODULE, Spec).

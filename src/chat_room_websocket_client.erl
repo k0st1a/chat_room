@@ -21,7 +21,7 @@ init(Req, State) ->
 
 websocket_init(State) ->
     lager:debug("Init, State:~n~p", [State]),
-    {ok, RoomPid} = chat_room_manager:start_room(),
+    {ok, RoomPid} = chat_room_manager:start_room(true),
     lager:debug("RoomPid:~1000p", [RoomPid]),
     Text = make_websocket_init_resp(self()),
     {[{text, Text}], #state{room_pid = RoomPid}}.

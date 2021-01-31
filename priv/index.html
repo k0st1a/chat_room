@@ -2,12 +2,161 @@
 <html lang="en">
 <head>
 	<meta charset="utf-8"/>
-	<title>Websocket client</title>
+	<title>ChatRoom</title>
 </head>
 
 <body>
 
 <header>
-	<h1>Websocket client</h1>
+	<h1>ChatRoom</h1>
 	<div id="status"></div>
 </header>
+
+<nav>
+	<div id="naming">
+		<input type='text' id="name" value=""></input>
+		<button type="button" onclick="enter_name()">Enter name</button>
+	</div>
+
+	<div id="connected">
+		<input type='text' id="message" value=""></input>
+		<button type="button" onclick="sendTxt();">send</button>
+	</div>
+</nav>
+
+<main id="content">
+    <!--<button id="clear" onclick="clearScreen()" >Clear text</button>-->
+	<div id="output"></div>
+</main>
+
+<script type="text/javascript">
+
+var websocket;
+var message = document.getElementById("message");
+var connected = document.getElementById("connected");
+var content = document.getElementById("content");
+var output = document.getElementById("output");
+var server = "ws://" + window.location.host + "/websocket";
+
+var name;
+var pid;
+
+connected.style.display = "none";
+content.style.display = "none";
+
+function enter_name(){
+    name = document.getElementById("name").value;
+    if (name == '') {
+        return;
+    };
+    naming.style.display = "none";
+    connect();
+};
+
+function sendEnterToRoom(value){
+    let msg = {
+        user_enter_to_room: {
+            user: value
+        }
+    };
+    let json = JSON.stringify(msg);
+    sendMsg(json);
+};
+
+function sendMsgToRoom(value){
+    let msg = {
+        user_msg_to_room: {
+            body: value
+        }
+    };
+    let json = JSON.stringify(msg);
+    sendMsg(json);
+};
+
+function sendMsg(value) {
+	if (websocket.readyState == websocket.OPEN) {
+		websocket.send(value);
+    } else {
+		showScreen('websocket is not connected');
+    };
+};
+
+
+function connect()
+{
+	wsHost = server;
+	websocket = new WebSocket(wsHost);
+	showScreen('<b>Connecting to: ' +  wsHost + '</b>');
+	websocket.onopen = function(evt) { onOpen(evt) };
+	websocket.onclose = function(evt) { onClose(evt) };
+	websocket.onmessage = function(evt) { onMessage(evt) };
+	websocket.onerror = function(evt) { onError(evt) };
+};
+
+function sendTxt() {
+    if (message.value == '') {
+        return;
+    };
+    sendMsgToRoom(message.value);
+    message.value = '';
+};
+
+function onOpen(evt) {
+	showScreen('<span style="color: green;">Websocket CONNECTED </span>');
+	connected.style.display = "";
+	content.style.display = "";
+};
+
+function onClose(evt) {
+	showScreen('<span style="color: red;">Websocket DISCONNECTED</span>');
+};
+
+function onMessage(evt) {
+    <!--console.log(evt);-->
+    let msg = JSON.parse(evt.data);
+    console.log(msg);
+    if ('websocket_init_resp' in msg) {
+        console.log('websocket_init_resp');
+        pid = msg.websocket_init_resp.pid;
+        showScreen('<span style="color: blue;">You name: ' + complexName(name,pid) + '</span>');
+        sendEnterToRoom(name);
+    } else if ('user_enter_to_room_notify' in msg) {
+        console.log('user_enter_to_room_notify');
+        let user_name = msg.user_enter_to_room_notify.user_name;
+        let user_pid = msg.user_enter_to_room_notify.user_pid;
+        showScreen('<span style="color: blue;">User ' + complexName(user_name, user_pid) + ' enter to room</span>');
+    } else if ('user_leave_from_room_notify' in msg) {
+        console.log('user_leave_from_room_notify');
+        let user_name = msg.user_leave_from_room_notify.user_name;
+        let user_pid = msg.user_leave_from_room_notify.user_pid;
+        showScreen('<span style="color: blue;"> User ' + complexName(user_name, user_pid) + ' leave from room</span>');
+    } else if ('user_msg_to_room_notify' in msg) {
+        console.log('user_msg_to_room_notify');
+        let user_name = msg.user_msg_to_room_notify.user_name;
+        let user_pid = msg.user_msg_to_room_notify.user_pid;
+        let msg_body = msg.user_msg_to_room_notify.msg_body;
+        showScreen('<span style="color: blue;">' + complexName(user_name, user_pid) + ': ' + msg_body + '</span>');
+    };
+};
+
+function complexName(Name,Pid) {
+    return '*' + name + '#' + pid + '*';
+};
+
+function onError(evt) {
+	showScreen('<span style="color: red;">ERROR: ' + evt.data + '</span>');
+};
+
+function showScreen(html) {
+	var el = document.createElement("p");
+	el.innerHTML = html;
+	output.insertBefore(el, output.firstChild);
+};
+
+function clearScreen() {
+	output.innerHTML = "";
+};
+
+</script>
+</body>
+</html>

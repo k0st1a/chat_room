@@ -19,13 +19,13 @@ encode(Msg) ->
         {ok, Encoded}
     catch
         T:E:ST ->
-            io:format(
-                user,
-                "Runtime error of encode, T:~1000p, E:~1000p"
-                "~nST:~n ~p"
-                "~nMsg:~n ~p~n",
-                [T, E, ST, Msg]
-            ),
+           %io:format(
+           %    user,
+           %    "Runtime error of encode, T:~1000p, E:~1000p"
+           %    "~nST:~n ~p"
+           %    "~nMsg:~n ~p~n",
+           %    [T, E, ST, Msg]
+           %),
             lager:warning(
                 "Runtime error of encode, T:~1000p, E:~1000p"
                 "~nST:~n ~p"
@@ -77,13 +77,13 @@ decode(JSON) ->
         {ok, Parsed}
     catch
         T:E:ST ->
-            io:format(
-                user,
-                "Runtime error of decode, T:~1000p, E:~1000p"
-                "~nST:~n ~p"
-                "~nJSON:~n ~p",
-                [T, E, ST, JSON]
-            ),
+           %io:format(
+           %    user,
+           %    "Runtime error of decode, T:~1000p, E:~1000p"
+           %    "~nST:~n ~p"
+           %    "~nJSON:~n ~p",
+           %    [T, E, ST, JSON]
+           %),
             lager:warning(
                 "Runtime error of decode, T:~1000p, E:~1000p"
                 "~nST:~n ~p"
